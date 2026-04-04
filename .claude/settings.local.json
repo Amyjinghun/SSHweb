@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/yuxin/**)",
+      "Bash(docker compose:*)"
+    ]
+  }
+}

@@ -1,0 +1,32 @@
+# 简化版 - 单阶段构建
+FROM node:18-alpine
+
+WORKDIR /app
+
+# 设置镜像源
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirror.docker.1ms.run\/alpine/g' /etc/apk/repositories
+RUN npm config set registry https://registry.npmmirror.com
+
+# 安装依赖
+RUN apk add --no-cache python3 make g++
+
+# 复制所有文件
+COPY server ./server
+COPY client ./client
+
+# 安装后端依赖
+RUN cd server && npm install --production
+
+# 安装前端依赖并构建
+RUN cd client && npm install && npm run build
+
+# 创建数据目录
+RUN mkdir -p /app/server/data /app/server/uploads
+
+# 暴露端口
+EXPOSE 3000
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+CMD ["node", "server/index.js"]

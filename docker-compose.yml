@@ -1,0 +1,9 @@
+services:
+  server-control-panel:
+    build: .
+    container_name: server-control-panel
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/server/data

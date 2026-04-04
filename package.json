@@ -1,0 +1,15 @@
+{
+  "name": "server-control-panel",
+  "version": "1.0.0",
+  "description": "Linux服务器群控系统",
+  "scripts": {
+    "server": "node server/index.js",
+    "client": "cd client && npm run dev",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "build": "cd client && npm run build",
+    "start": "node server/index.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
