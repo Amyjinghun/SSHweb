@@ -19,7 +19,7 @@
           <span>控制台</span>
         </el-menu-item>
         <el-menu-item index="/servers">
-          <el-icon><Server /></el-icon>
+          <el-icon><Monitor /></el-icon>
           <span>服务器管理</span>
         </el-menu-item>
         <el-menu-item index="/templates">
@@ -54,12 +54,6 @@
       <el-header class="header">
         <h3>批量控制台</h3>
         <div class="header-actions">
-          <el-button @click="showImportDialog = true">
-            <el-icon><Upload /></el-icon> 导入配置
-          </el-button>
-          <el-button @click="exportServerConfig">
-            <el-icon><Download /></el-icon> 导出配置
-          </el-button>
           <el-button type="primary" @click="refreshServers" :loading="loading">
             <el-icon><Refresh /></el-icon> 刷新
           </el-button>
@@ -136,7 +130,7 @@
                       <el-icon><Monitor /></el-icon> {{ row.os_name }} {{ row.os_version }}
                     </div>
                     <div class="os-kernel" v-if="row.kernel">
-                      <el-icon><Cpu /></el-icon> {{ row.kernel }}
+                      <el-icon><SetUp /></el-icon> {{ row.kernel }}
                     </div>
                   </div>
                   <span v-else class="config-empty">未检测</span>
@@ -151,7 +145,7 @@
                       <div>硬盘: {{ row.disk || '-' }}</div>
                     </template>
                     <div class="server-config">
-                      <span v-if="row.cpu_cores" class="config-item cpu"><el-icon><Cpu /></el-icon>{{ row.cpu_cores }}核</span>
+                      <span v-if="row.cpu_cores" class="config-item cpu"><el-icon><SetUp /></el-icon>{{ row.cpu_cores }}核</span>
                       <span v-if="row.memory" class="config-item mem"><el-icon><Coin /></el-icon>{{ row.memory }}</span>
                       <span v-if="row.disk" class="config-item disk"><el-icon><FolderOpened /></el-icon>{{ row.disk }}</span>
                     </div>
@@ -280,35 +274,6 @@
             </el-tab-pane>
           </el-tabs>
         </el-dialog>
-
-        <!-- 导入配置对话框 -->
-        <el-dialog v-model="showImportDialog" title="导入服务器配置" width="500px">
-          <el-alert type="warning" :closable="false" style="margin-bottom: 20px">
-            导入将覆盖现有服务器配置，请谨慎操作
-          </el-alert>
-          <el-upload
-            drag
-            :show-file-list="true"
-            :auto-upload="false"
-            :on-change="handleImportFile"
-            accept=".json"
-            :limit="1"
-          >
-            <el-icon class="el-icon--upload" size="60"><Upload /></el-icon>
-            <div class="el-upload__text">
-              拖拽文件到此处或 <em>点击上传</em>
-            </div>
-            <template #tip>
-              <div class="el-upload__tip">只能上传 JSON 格式的配置文件</div>
-            </template>
-          </el-upload>
-          <template #footer>
-            <el-button @click="showImportDialog = false">取消</el-button>
-            <el-button type="primary" :loading="importing" @click="confirmImport" :disabled="!importFile">
-              确认导入
-            </el-button>
-          </template>
-        </el-dialog>
       </el-main>
     </el-container>
   </el-container>
@@ -336,11 +301,8 @@ const selectedTemplate = ref('')
 const pingResults = ref({})
 const serverStatus = ref({})
 const showAccountDialog = ref(false)
-const showImportDialog = ref(false)
 const passwordLoading = ref(false)
 const usernameLoading = ref(false)
-const importing = ref(false)
-const importFile = ref(null)
 const passwordFormRef = ref(null)
 const usernameFormRef = ref(null)
 
@@ -685,79 +647,6 @@ const handleChangeUsername = async () => {
     ElMessage.error(error || '用户名修改失败')
   } finally {
     usernameLoading.value = false
-  }
-}
-
-// 导出服务器配置
-const exportServerConfig = async () => {
-  try {
-    // 调用后端API获取完整配置（包含密码）
-    const response = await fetch('/api/servers/export/full', {
-      credentials: 'include'
-    })
-    const config = await response.json()
-
-    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `servers-backup-${new Date().toISOString().slice(0, 10)}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-
-    ElMessage.success('配置导出成功（包含密码）')
-  } catch (error) {
-    ElMessage.error('导出失败: ' + error)
-  }
-}
-
-// 处理导入文件选择
-const handleImportFile = (file) => {
-  importFile.value = file.raw
-  return false
-}
-
-// 确认导入
-const confirmImport = async () => {
-  if (!importFile.value) {
-    ElMessage.warning('请先选择文件')
-    return
-  }
-
-  try {
-    await ElMessageBox.confirm('导入将覆盖现有服务器配置，是否继续？', '警告', { type: 'warning' })
-
-    importing.value = true
-    const text = await importFile.value.text()
-    const config = JSON.parse(text)
-
-    if (!config.servers || !Array.isArray(config.servers)) {
-      throw new Error('无效的配置文件格式')
-    }
-
-    // 调用后端API导入
-    const response = await fetch('/api/servers/import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ servers: config.servers })
-    })
-
-    const result = await response.json()
-    if (result.success) {
-      ElMessage.success(`导入成功: ${result.count} 台服务器`)
-      showImportDialog.value = false
-      importFile.value = null
-      loadServers()
-    } else {
-      throw new Error(result.error)
-    }
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('导入失败: ' + error)
-    }
-  } finally {
-    importing.value = false
   }
 }
 

@@ -198,4 +198,51 @@ router.get('/:id/detect', async (req, res) => {
   }
 });
 
+// 批量检测所有服务器信息
+router.post('/detect-all', async (req, res) => {
+  try {
+    const servers = db.server.getAll();
+    const results = [];
+
+    for (const server of servers) {
+      try {
+        const info = await ssh.getServerInfo(server.id);
+        // 更新数据库
+        db.server.update(server.id, {
+          name: server.name,
+          host: server.host,
+          port: server.port,
+          username: server.username,
+          password: server.password,
+          private_key: server.private_key,
+          group_name: server.group_name || 'default',
+          cpu_cores: info.cpu_cores || null,
+          memory: info.memory || '',
+          disk: info.disk || '',
+          os_name: info.os_name || null,
+          os_version: info.os_version || null,
+          kernel: info.kernel || null
+        });
+        results.push({
+          id: server.id,
+          name: server.name,
+          success: true,
+          info
+        });
+      } catch (err) {
+        results.push({
+          id: server.id,
+          name: server.name,
+          success: false,
+          error: err.message
+        });
+      }
+    }
+
+    res.json({ success: true, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

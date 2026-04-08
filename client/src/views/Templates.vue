@@ -19,7 +19,7 @@
           <span>控制台</span>
         </el-menu-item>
         <el-menu-item index="/servers">
-          <el-icon><Server /></el-icon>
+          <el-icon><Monitor /></el-icon>
           <span>服务器管理</span>
         </el-menu-item>
         <el-menu-item index="/templates">

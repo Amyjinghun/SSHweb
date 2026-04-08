@@ -19,7 +19,7 @@
           <span>控制台</span>
         </el-menu-item>
         <el-menu-item index="/servers">
-          <el-icon><Server /></el-icon>
+          <el-icon><Monitor /></el-icon>
           <span>服务器管理</span>
         </el-menu-item>
         <el-menu-item index="/templates">
@@ -31,10 +31,24 @@
 
     <el-container>
       <el-header class="header">
-        <h3>服务器管理</h3>
-        <el-button type="primary" @click="showAddDialog">
-          <el-icon><Plus /></el-icon> 添加服务器
-        </el-button>
+        <h3>
+          <el-icon class="header-icon"><Monitor /></el-icon>
+          服务器管理
+        </h3>
+        <div class="header-actions">
+          <el-button @click="showImportDialog = true">
+            <el-icon><Upload /></el-icon> 导入配置
+          </el-button>
+          <el-button @click="exportServerConfig" :loading="exporting">
+            <el-icon><Download /></el-icon> 导出配置
+          </el-button>
+          <el-button type="warning" @click="detectAllServers" :loading="detectingAll">
+            <el-icon><SetUp /></el-icon> 一键获取配置
+          </el-button>
+          <el-button type="primary" @click="showAddDialog">
+            <el-icon><Plus /></el-icon> 添加服务器
+          </el-button>
+        </div>
       </el-header>
 
       <el-main class="main">
@@ -49,7 +63,7 @@
                     <el-icon><Monitor /></el-icon> {{ row.os_name }} {{ row.os_version }}
                   </div>
                   <div v-if="row.kernel" class="os-kernel">
-                    <el-icon><Cpu /></el-icon> {{ row.kernel }}
+                    <el-icon><SetUp /></el-icon> {{ row.kernel }}
                   </div>
                   <span v-if="!row.os_name && !row.kernel" class="no-config">未检测</span>
                 </div>
@@ -59,7 +73,7 @@
               <template #default="{ row }">
                 <div class="config-info">
                   <el-tag v-if="row.cpu_cores" size="small" type="info" class="config-tag">
-                    <el-icon><Cpu /></el-icon> {{ row.cpu_cores }}核
+                    <el-icon><SetUp /></el-icon> {{ row.cpu_cores }}核
                   </el-tag>
                   <el-tag v-if="row.memory" size="small" type="warning" class="config-tag">
                     <el-icon><Coin /></el-icon> {{ row.memory }}
@@ -209,6 +223,62 @@
             <el-button type="primary" :loading="submitting" @click="submitForm">确定</el-button>
           </template>
         </el-dialog>
+
+        <!-- 导入配置对话框 -->
+        <el-dialog v-model="showImportDialog" title="导入服务器配置" width="500px">
+          <el-alert type="warning" :closable="false" style="margin-bottom: 20px">
+            导入将覆盖现有服务器配置，请谨慎操作
+          </el-alert>
+          <el-upload
+            drag
+            :show-file-list="true"
+            :auto-upload="false"
+            :on-change="handleImportFile"
+            accept=".json"
+            :limit="1"
+          >
+            <el-icon class="el-icon--upload" size="60"><Upload /></el-icon>
+            <div class="el-upload__text">
+              拖拽文件到此处或 <em>点击上传</em>
+            </div>
+            <template #tip>
+              <div class="el-upload__tip">只能上传 JSON 格式的配置文件</div>
+            </template>
+          </el-upload>
+          <template #footer>
+            <el-button @click="showImportDialog = false">取消</el-button>
+            <el-button type="primary" :loading="importing" @click="confirmImport" :disabled="!importFile">
+              确认导入
+            </el-button>
+          </template>
+        </el-dialog>
+
+        <!-- 批量检测结果对话框 -->
+        <el-dialog v-model="showDetectResultDialog" title="批量检测结果" width="600px">
+          <div class="detect-results">
+            <div v-for="result in detectResults" :key="result.id" class="detect-result-item">
+              <div class="detect-result-header">
+                <el-icon v-if="result.success" color="#67C23A"><SuccessFilled /></el-icon>
+                <el-icon v-else color="#F56C6C"><CircleCloseFilled /></el-icon>
+                <span class="server-name">{{ result.name }}</span>
+                <el-tag :type="result.success ? 'success' : 'danger'" size="small">
+                  {{ result.success ? '成功' : '失败' }}
+                </el-tag>
+              </div>
+              <div v-if="result.success && result.info" class="detect-result-info">
+                <el-tag size="small" type="info">{{ result.info.os_name }} {{ result.info.os_version }}</el-tag>
+                <el-tag size="small" type="warning">{{ result.info.memory }}</el-tag>
+                <el-tag size="small">{{ result.info.cpu_cores }}核</el-tag>
+              </div>
+              <div v-else class="detect-result-error">
+                {{ result.error }}
+              </div>
+            </div>
+          </div>
+          <template #footer>
+            <el-button type="primary" @click="showDetectResultDialog = false">确定</el-button>
+          </template>
+        </el-dialog>
       </el-main>
     </el-container>
   </el-container>
@@ -231,6 +301,17 @@ const detecting = ref(false)
 const detectedInfo = ref(null)
 const showPassword = ref(false)
 const realPassword = ref('')
+
+// 导入导出相关
+const showImportDialog = ref(false)
+const importing = ref(false)
+const exporting = ref(false)
+const importFile = ref(null)
+
+// 批量检测相关
+const detectingAll = ref(false)
+const showDetectResultDialog = ref(false)
+const detectResults = ref([])
 
 const form = reactive({
   name: '',
@@ -440,6 +521,107 @@ const deleteServer = async (server) => {
   }
 }
 
+// 导出服务器配置
+const exportServerConfig = async () => {
+  exporting.value = true
+  try {
+    const config = await serverApi.exportFull()
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `servers-backup-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('配置导出成功')
+  } catch (error) {
+    ElMessage.error('导出失败: ' + error)
+  } finally {
+    exporting.value = false
+  }
+}
+
+// 处理导入文件选择
+const handleImportFile = (file) => {
+  importFile.value = file.raw
+  return false
+}
+
+// 确认导入
+const confirmImport = async () => {
+  if (!importFile.value) {
+    ElMessage.warning('请先选择文件')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm('导入将覆盖现有服务器配置，是否继续？', '警告', { type: 'warning' })
+
+    importing.value = true
+    const text = await importFile.value.text()
+    const config = JSON.parse(text)
+
+    if (!config.servers || !Array.isArray(config.servers)) {
+      throw new Error('无效的配置文件格式')
+    }
+
+    await serverApi.import(config.servers)
+    ElMessage.success(`导入成功: ${config.servers.length} 台服务器`)
+    showImportDialog.value = false
+    importFile.value = null
+    loadServers()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('导入失败: ' + error)
+    }
+  } finally {
+    importing.value = false
+  }
+}
+
+// 批量检测所有服务器
+const detectAllServers = async () => {
+  if (servers.value.length === 0) {
+    ElMessage.warning('暂无服务器')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `将检测所有 ${servers.value.length} 台服务器的系统与硬件配置，是否继续？`,
+      '批量检测',
+      { type: 'info' }
+    )
+
+    detectingAll.value = true
+    detectResults.value = []
+
+    const res = await serverApi.detectAll()
+    detectResults.value = res.results.map(r => ({
+      id: r.id,
+      name: r.name,
+      success: r.success,
+      info: r.info,
+      error: r.error
+    }))
+
+    const successCount = res.results.filter(r => r.success).length
+    ElMessage.success(`检测完成: ${successCount}/${res.results.length} 成功`)
+
+    // 刷新服务器列表
+    loadServers()
+
+    // 显示结果对话框
+    showDetectResultDialog.value = true
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('批量检测失败: ' + error)
+    }
+  } finally {
+    detectingAll.value = false
+  }
+}
+
 onMounted(() => {
   loadServers()
 })
@@ -568,5 +750,64 @@ onMounted(() => {
 
 .el-divider {
   margin: 15px 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.header-icon {
+  color: #409EFF;
+  font-size: 22px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.detect-results {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.detect-result-item {
+  padding: 12px;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  background: #fafafa;
+}
+
+.detect-result-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.detect-result-header .server-name {
+  font-weight: 600;
+  flex: 1;
+}
+
+.detect-result-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.detect-result-error {
+  color: #F56C6C;
+  font-size: 13px;
 }
 </style>

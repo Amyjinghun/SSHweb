@@ -40,6 +40,7 @@ export const serverApi = {
   getStatus: (id) => api.get(`/servers/${id}/status`),
   ping: (id, target) => api.get(`/servers/${id}/ping`, { params: { target } }),
   detect: (id) => api.get(`/servers/${id}/detect`),
+  detectAll: () => api.post('/servers/detect-all'),
   exportFull: () => api.get('/servers/export/full'),
   import: (servers) => api.post('/servers/import', { servers })
 }
